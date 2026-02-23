@@ -1,9 +1,25 @@
 import streamlit as st
 import pandas as pd
-import os
+import io
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Alcohol Tracker Game", layout="centered")
+
+# -----------------------------
+# PERSISTENT STORAGE
+# -----------------------------
+storage = st.storage.file("alcohol-data")
+
+def load_user_df(user):
+    filename = f"{user}.csv"
+    if filename not in storage.list_files():
+        return pd.DataFrame(columns=["date", "drink_type", "volume", "abv", "units", "drinks"])
+    content = storage.read(filename)
+    return pd.read_csv(io.StringIO(content.decode()))
+
+def save_user_df(user, df):
+    filename = f"{user}.csv"
+    storage.write(filename, df.to_csv(index=False).encode())
 
 # -----------------------------
 # CUSTOM CSS (gradient, orange theme, gold/silver/bronze rows)
@@ -93,7 +109,6 @@ td {
 # -----------------------------
 USERS = ["Tim", "Rareș", "Rebecca"]
 
-# Emoji avatars
 USER_ICONS = {
     "Tim": "🦄",
     "Rareș": "🦭",
@@ -101,11 +116,6 @@ USER_ICONS = {
 }
 
 user = st.selectbox("Who is using the app?", USERS)
-filename = f"data/{user}.csv"
-
-os.makedirs("data", exist_ok=True)
-if not os.path.exists(filename):
-    pd.DataFrame(columns=["date", "drink_type", "volume", "abv", "units", "drinks"]).to_csv(filename, index=False)
 
 # -----------------------------
 # INSTRUCTIONS
@@ -137,12 +147,6 @@ def calculate_score(units, drinks):
         return 100
     return 100 - (10 * units) - (2 * drinks)
 
-def load_user_df(u):
-    f = f"data/{u}.csv"
-    if not os.path.exists(f):
-        return pd.DataFrame(columns=["date", "drink_type", "volume", "abv", "units", "drinks"])
-    return pd.read_csv(f)
-
 def get_last_logged_score(df):
     if df.empty:
         return None
@@ -159,6 +163,7 @@ volume = st.number_input("Volume (ml)", min_value=0.0)
 abv = st.number_input("ABV (%)", min_value=0.0)
 
 if st.button("Add drink"):
+    df = load_user_df(user)
     units = calculate_units(volume, abv)
     new_row = {
         "date": datetime.now().date(),
@@ -168,12 +173,12 @@ if st.button("Add drink"):
         "units": units,
         "drinks": 1
     }
-    df = load_user_df(user)
     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    df.to_csv(filename, index=False)
+    save_user_df(user, df)
     st.success("Drink added!")
 
 if st.button("0 alcohol today"):
+    df = load_user_df(user)
     new_row = {
         "date": datetime.now().date(),
         "drink_type": "None",
@@ -182,9 +187,8 @@ if st.button("0 alcohol today"):
         "units": 0,
         "drinks": 0
     }
-    df = load_user_df(user)
     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    df.to_csv(filename, index=False)
+    save_user_df(user, df)
     st.success("Logged a sober day!")
 
 # -----------------------------
@@ -204,47 +208,28 @@ for u in USERS:
     score_today = calculate_score(units_today, drinks_today)
 
     last_score = get_last_logged_score(df[df["date"] != str(today)])
-    if last_score is None:
-        trend = "—"
-    else:
-        if score_today > last_score:
-            trend = "↑"
-        elif score_today < last_score:
-            trend = "↓"
-        else:
-            trend = "→"
+    trend = "—" if last_score is None else ("↑" if score_today > last_score else "↓" if score_today < last_score else "→")
 
     daily_data.append([u, units_today, drinks_today, round(score_today, 1), trend])
 
 daily_df = pd.DataFrame(daily_data, columns=["User", "Units", "Drinks", "Score", "Trend"])
 daily_df = daily_df.sort_values(by="Score", ascending=False)
 
-# Add emoji avatars
 daily_df["User"] = daily_df["User"].apply(lambda u: f"{USER_ICONS[u]} {u}")
-
-# Add crown to winner
 daily_df.iloc[0, daily_df.columns.get_loc("User")] += " 👑"
 
-# Convert to styled HTML
 def style_leaderboard(df):
     html = df.to_html(index=False, escape=False)
     rows = html.split("<tr>")
     header = rows[1]
     body = rows[2:]
-
-    styled_rows = []
+    styled = []
     for i, row in enumerate(body):
-        if i == 0:
-            styled_rows.append(f'<tr class="gold-row">{row}')
-        elif i == 1:
-            styled_rows.append(f'<tr class="silver-row">{row}')
-        elif i == 2:
-            styled_rows.append(f'<tr class="bronze-row">{row}')
-        else:
-            styled_rows.append(f'<tr>{row}')
-
-    final_html = "<table>" + "<tr>" + header + "".join(styled_rows) + "</table>"
-    return final_html
+        if i == 0: styled.append(f'<tr class="gold-row">{row}')
+        elif i == 1: styled.append(f'<tr class="silver-row">{row}')
+        elif i == 2: styled.append(f'<tr class="bronze-row">{row}')
+        else: styled.append(f'<tr>{row}')
+    return "<table><tr>" + header + "".join(styled) + "</table>"
 
 st.markdown(style_leaderboard(daily_df), unsafe_allow_html=True)
 
@@ -267,18 +252,13 @@ for u in USERS:
     daily_scores = []
     for d in week_df["date"].unique():
         day_df = week_df[week_df["date"] == d]
-        units_d = day_df["units"].sum()
-        drinks_d = day_df["drinks"].sum()
-        daily_scores.append(calculate_score(units_d, drinks_d))
+        daily_scores.append(calculate_score(day_df["units"].sum(), day_df["drinks"].sum()))
 
     weekly_score = sum(daily_scores) if daily_scores else 0
-
     weekly_data.append([u, round(units_week, 1), drinks_week, round(weekly_score, 1)])
 
 weekly_df = pd.DataFrame(weekly_data, columns=["User", "Units (7d)", "Drinks (7d)", "Score (7d)"])
 weekly_df = weekly_df.sort_values(by="Score (7d)", ascending=False)
-
-# Add emoji avatars
 weekly_df["User"] = weekly_df["User"].apply(lambda u: f"{USER_ICONS[u]} {u}")
 
 st.table(weekly_df)
