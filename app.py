@@ -6,9 +6,99 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="Alcohol Tracker Game", layout="centered")
 
 # -----------------------------
+# CUSTOM CSS (gradient, orange theme, gold/silver/bronze rows)
+# -----------------------------
+st.markdown("""
+<style>
+
+/* Gradient background */
+body {
+    background: linear-gradient(135deg, #f2f2f2 0%, #e6e6e6 100%) !important;
+}
+
+/* Main container spacing */
+.block-container {
+    padding-top: 2rem;
+}
+
+/* Headings in warm orange */
+h1, h2, h3, h4 {
+    color: #FF8C42 !important;
+}
+
+/* Buttons */
+.stButton>button {
+    background-color: #FF8C42 !important;
+    color: white !important;
+    border-radius: 10px !important;
+    padding: 0.6rem 1.2rem !important;
+    border: none !important;
+    font-weight: 600 !important;
+}
+
+.stButton>button:hover {
+    background-color: #ffa766 !important;
+}
+
+/* Leaderboard table styling */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+thead tr th {
+    background-color: #FF8C42 !important;
+    color: white !important;
+    padding: 10px;
+    font-size: 1rem;
+}
+
+tbody tr:nth-child(even) {
+    background-color: #fafafa;
+}
+
+tbody tr:nth-child(odd) {
+    background-color: #ffffff;
+}
+
+tbody tr:hover {
+    background-color: #ffe8d6 !important;
+}
+
+/* Gold / Silver / Bronze rows */
+tr.gold-row {
+    background-color: #FFD700 !important;
+}
+
+tr.silver-row {
+    background-color: #C0C0C0 !important;
+}
+
+tr.bronze-row {
+    background-color: #CD7F32 !important;
+}
+
+/* Make emojis larger */
+td {
+    font-size: 1.1rem;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# -----------------------------
 # USER SETUP
 # -----------------------------
 USERS = ["Tim", "Rareș", "Rebecca"]
+
+# Emoji avatars
+USER_ICONS = {
+    "Tim": "🦄",
+    "Rareș": "🦭",
+    "Rebecca": "🐿️"
+}
 
 user = st.selectbox("Who is using the app?", USERS)
 filename = f"data/{user}.csv"
@@ -121,7 +211,6 @@ for u in USERS:
             trend = "↑"
         elif score_today < last_score:
             trend = "↓"
-            trend = "↓"
         else:
             trend = "→"
 
@@ -129,7 +218,35 @@ for u in USERS:
 
 daily_df = pd.DataFrame(daily_data, columns=["User", "Units", "Drinks", "Score", "Trend"])
 daily_df = daily_df.sort_values(by="Score", ascending=False)
-st.table(daily_df)
+
+# Add emoji avatars
+daily_df["User"] = daily_df["User"].apply(lambda u: f"{USER_ICONS[u]} {u}")
+
+# Add crown to winner
+daily_df.iloc[0, daily_df.columns.get_loc("User")] += " 👑"
+
+# Convert to styled HTML
+def style_leaderboard(df):
+    html = df.to_html(index=False, escape=False)
+    rows = html.split("<tr>")
+    header = rows[1]
+    body = rows[2:]
+
+    styled_rows = []
+    for i, row in enumerate(body):
+        if i == 0:
+            styled_rows.append(f'<tr class="gold-row">{row}')
+        elif i == 1:
+            styled_rows.append(f'<tr class="silver-row">{row}')
+        elif i == 2:
+            styled_rows.append(f'<tr class="bronze-row">{row}')
+        else:
+            styled_rows.append(f'<tr>{row}')
+
+    final_html = "<table>" + "<tr>" + header + "".join(styled_rows) + "</table>"
+    return final_html
+
+st.markdown(style_leaderboard(daily_df), unsafe_allow_html=True)
 
 # -----------------------------
 # WEEKLY LEADERBOARD
@@ -147,7 +264,6 @@ for u in USERS:
     units_week = week_df["units"].sum()
     drinks_week = week_df["drinks"].sum()
 
-    # compute weekly score
     daily_scores = []
     for d in week_df["date"].unique():
         day_df = week_df[week_df["date"] == d]
@@ -161,6 +277,10 @@ for u in USERS:
 
 weekly_df = pd.DataFrame(weekly_data, columns=["User", "Units (7d)", "Drinks (7d)", "Score (7d)"])
 weekly_df = weekly_df.sort_values(by="Score (7d)", ascending=False)
+
+# Add emoji avatars
+weekly_df["User"] = weekly_df["User"].apply(lambda u: f"{USER_ICONS[u]} {u}")
+
 st.table(weekly_df)
 
 # -----------------------------
@@ -171,54 +291,3 @@ st.markdown("""
 Take the official AUDIT alcohol screening test:  
 https://auditscreen.org/check-your-drinking/
 """)
-st.markdown("""
-<style>
-/* Make the main container wider */
-.main {
-    padding: 2rem;
-}
-
-/* Style the leaderboard tables */
-table {
-    border-collapse: collapse;
-    width: 100%;
-}
-
-thead tr th {
-    background-color: #FF4B4B;
-    color: white;
-    padding: 10px;
-}
-
-tbody tr:nth-child(even) {
-    background-color: #f9f9f9;
-}
-
-tbody tr:hover {
-    background-color: #ffecec;
-}
-
-/* Style headers */
-h1, h2, h3 {
-    color: #FF4B4B;
-}
-
-/* Style buttons */
-.stButton>button {
-    background-color: #FF4B4B;
-    color: white;
-    border-radius: 8px;
-    padding: 0.6rem 1.2rem;
-    border: none;
-}
-
-.stButton>button:hover {
-    background-color: #ff7777;
-}
-
-/* Style selectbox */
-.css-2b097c-container {
-    border-radius: 8px;
-}
-</style>
-""", unsafe_allow_html=True)
