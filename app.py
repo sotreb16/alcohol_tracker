@@ -1,62 +1,173 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-from datetime import datetime
-from utils.calculations import calculate_units
-from utils.audit_c import audit_c_score, audit_c_risk
-from utils.charts import weekly_units_chart, daily_units_chart
+import os
+from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Alcohol Tracker", layout="wide")
+st.set_page_config(page_title="Alcohol Tracker Game", layout="centered")
 
-# Load or create data
-try:
-    df = pd.read_csv("data/drinks.csv", parse_dates=["date"])
-except:
-    df = pd.DataFrame(columns=["date", "type", "volume_ml", "abv", "units", "craving", "notes"])
+# -----------------------------
+# USER SETUP
+# -----------------------------
+USERS = ["Tim", "Rareș", "Rebecca"]
 
-st.title("Alcohol Tracker (Local Only)")
+user = st.selectbox("Who is using the app?", USERS)
+filename = f"data/{user}.csv"
 
-st.header("Log a drink")
-col1, col2, col3 = st.columns(3)
+os.makedirs("data", exist_ok=True)
+if not os.path.exists(filename):
+    pd.DataFrame(columns=["date", "drink_type", "volume", "abv", "units", "drinks"]).to_csv(filename, index=False)
 
-drink_type = col1.selectbox("Type", ["Beer", "Wine", "Spirits"])
-volume = col2.number_input("Volume (ml)", 0, 2000, 330)
-abv = col3.number_input("ABV (%)", 0.0, 80.0, 5.0)
+# -----------------------------
+# INSTRUCTIONS
+# -----------------------------
+st.markdown("""
+### How scoring works
+- **0 units = 100 points**
+- **Each unit = −10 points**
+- **Each drink = −2 points**
+- **Negative scores are possible**
+- **Highest score wins the day**
+- **Weekly score = sum of the last 7 days**
 
-craving = st.slider("Craving (1–10)", 1, 10, 5)
-notes = st.text_input("Notes")
+### How to win
+- Log drinks honestly  
+- Use **“0 alcohol today”** to claim a sober day  
+- Keep your weekly score higher than your friends  
+- Check the leaderboard to see who’s ahead  
+""")
 
-if st.button("Add entry"):
+# -----------------------------
+# FUNCTIONS
+# -----------------------------
+def calculate_units(volume, abv):
+    return volume * (abv / 100) * 0.789
+
+def calculate_score(units, drinks):
+    if units == 0:
+        return 100
+    return 100 - (10 * units) - (2 * drinks)
+
+def load_user_df(u):
+    f = f"data/{u}.csv"
+    if not os.path.exists(f):
+        return pd.DataFrame(columns=["date", "drink_type", "volume", "abv", "units", "drinks"])
+    return pd.read_csv(f)
+
+def get_last_logged_score(df):
+    if df.empty:
+        return None
+    last_row = df.iloc[-1]
+    return calculate_score(last_row["units"], last_row["drinks"])
+
+# -----------------------------
+# LOGGING SECTION
+# -----------------------------
+st.header("Log your drinks")
+
+drink_type = st.text_input("Drink type (Beer, Wine, etc.)")
+volume = st.number_input("Volume (ml)", min_value=0.0)
+abv = st.number_input("ABV (%)", min_value=0.0)
+
+if st.button("Add drink"):
     units = calculate_units(volume, abv)
     new_row = {
-        "date": datetime.now(),
-        "type": drink_type,
-        "volume_ml": volume,
+        "date": datetime.now().date(),
+        "drink_type": drink_type,
+        "volume": volume,
         "abv": abv,
         "units": units,
-        "craving": craving,
-        "notes": notes
+        "drinks": 1
     }
+    df = load_user_df(user)
     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    df.to_csv("data/drinks.csv", index=False)
-    st.success("Logged!")
+    df.to_csv(filename, index=False)
+    st.success("Drink added!")
 
-st.header("Analytics")
+if st.button("0 alcohol today"):
+    new_row = {
+        "date": datetime.now().date(),
+        "drink_type": "None",
+        "volume": 0,
+        "abv": 0,
+        "units": 0,
+        "drinks": 0
+    }
+    df = load_user_df(user)
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    df.to_csv(filename, index=False)
+    st.success("Logged a sober day!")
 
-if len(df) > 0:
-    st.plotly_chart(daily_units_chart(df), use_container_width=True)
-    st.plotly_chart(weekly_units_chart(df), use_container_width=True)
+# -----------------------------
+# DAILY LEADERBOARD
+# -----------------------------
+st.header("Daily Leaderboard")
 
-    st.subheader("Dry-day streak")
-    streak = (df.groupby(df["date"].dt.date)["units"].sum() == 0).astype(int)
-    st.write(f"Current streak: {streak[::-1].cumsum().iloc[0]} days")
+today = datetime.now().date()
+daily_data = []
 
-st.header("AUDIT‑C Screening")
-q1 = st.selectbox("How often do you drink?", ["Never", "Monthly", "Weekly", "Daily"])
-q2 = st.selectbox("How many drinks on a typical day?", ["1–2", "3–4", "5–6", "7+"])
-q3 = st.selectbox("How often 6+ drinks?", ["Never", "Monthly", "Weekly", "Daily"])
+for u in USERS:
+    df = load_user_df(u)
+    today_df = df[df["date"] == str(today)]
 
-score = audit_c_score(q1, q2, q3)
-risk = audit_c_risk(score)
+    units_today = today_df["units"].sum() if not today_df.empty else 0
+    drinks_today = today_df["drinks"].sum() if not today_df.empty else 0
+    score_today = calculate_score(units_today, drinks_today)
 
-st.write(f"Score: **{score}** — {risk}")
+    last_score = get_last_logged_score(df[df["date"] != str(today)])
+    if last_score is None:
+        trend = "—"
+    else:
+        if score_today > last_score:
+            trend = "↑"
+        elif score_today < last_score:
+            trend = "↓"
+            trend = "↓"
+        else:
+            trend = "→"
+
+    daily_data.append([u, units_today, drinks_today, round(score_today, 1), trend])
+
+daily_df = pd.DataFrame(daily_data, columns=["User", "Units", "Drinks", "Score", "Trend"])
+daily_df = daily_df.sort_values(by="Score", ascending=False)
+st.table(daily_df)
+
+# -----------------------------
+# WEEKLY LEADERBOARD
+# -----------------------------
+st.header("Weekly Leaderboard")
+
+week_ago = today - timedelta(days=7)
+weekly_data = []
+
+for u in USERS:
+    df = load_user_df(u)
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    week_df = df[df["date"] >= week_ago]
+
+    units_week = week_df["units"].sum()
+    drinks_week = week_df["drinks"].sum()
+
+    # compute weekly score
+    daily_scores = []
+    for d in week_df["date"].unique():
+        day_df = week_df[week_df["date"] == d]
+        units_d = day_df["units"].sum()
+        drinks_d = day_df["drinks"].sum()
+        daily_scores.append(calculate_score(units_d, drinks_d))
+
+    weekly_score = sum(daily_scores) if daily_scores else 0
+
+    weekly_data.append([u, round(units_week, 1), drinks_week, round(weekly_score, 1)])
+
+weekly_df = pd.DataFrame(weekly_data, columns=["User", "Units (7d)", "Drinks (7d)", "Score (7d)"])
+weekly_df = weekly_df.sort_values(by="Score (7d)", ascending=False)
+st.table(weekly_df)
+
+# -----------------------------
+# AUDIT LINK
+# -----------------------------
+st.markdown("""
+### Check your drinking habits
+Take the official AUDIT alcohol screening test:  
+https://auditscreen.org/check-your-drinking/
+""")
