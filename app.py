@@ -100,13 +100,16 @@ USER_ICONS = {
     "Rebecca": "🐿️"
 }
 
+# Set absolute data directory
+DATA_DIR = "/Users/rebeccasotiroff/Desktop/alcohol_tracker/data"
+os.makedirs(DATA_DIR, exist_ok=True)
+
 user = st.selectbox("Who is using the app?", USERS)
-filename = f"data/{user}.csv"
+filename = os.path.join(DATA_DIR, f"{user}.csv")
 
-os.makedirs("data", exist_ok=True)
 if not os.path.exists(filename):
-    pd.DataFrame(columns=["date", "drink_type", "volume", "abv", "units", "drinks"]).to_csv(filename, index=False)
-
+    initial_df = pd.DataFrame(columns=["date", "drink_type", "volume", "abv", "units", "drinks"])
+    initial_df.to_csv(filename, index=False)
 # -----------------------------
 # INSTRUCTIONS
 # -----------------------------
@@ -138,11 +141,10 @@ def calculate_score(units, drinks):
     return 100 - (10 * units) - (2 * drinks)
 
 def load_user_df(u):
-    f = f"data/{u}.csv"
+    f = os.path.join(DATA_DIR, f"{u}.csv")
     if not os.path.exists(f):
         initial_df = pd.DataFrame(columns=["date", "drink_type", "volume", "abv", "units", "drinks"])
         initial_df.to_csv(f, index=False)
-        # return pd.DataFrame(columns=["date", "drink_type", "volume", "abv", "units", "drinks"])
     return pd.read_csv(f)
 
 def get_last_logged_score(df):
