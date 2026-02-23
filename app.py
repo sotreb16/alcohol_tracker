@@ -140,7 +140,9 @@ def calculate_score(units, drinks):
 def load_user_df(u):
     f = f"data/{u}.csv"
     if not os.path.exists(f):
-        return pd.DataFrame(columns=["date", "drink_type", "volume", "abv", "units", "drinks"])
+        initial_df = pd.DataFrame(columns=["date", "drink_type", "volume", "abv", "units", "drinks"])
+        initial_df.to_csv(f, index=False)
+        # return pd.DataFrame(columns=["date", "drink_type", "volume", "abv", "units", "drinks"])
     return pd.read_csv(f)
 
 def get_last_logged_score(df):
