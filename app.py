@@ -171,3 +171,54 @@ st.markdown("""
 Take the official AUDIT alcohol screening test:  
 https://auditscreen.org/check-your-drinking/
 """)
+st.markdown("""
+<style>
+/* Make the main container wider */
+.main {
+    padding: 2rem;
+}
+
+/* Style the leaderboard tables */
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+thead tr th {
+    background-color: #FF4B4B;
+    color: white;
+    padding: 10px;
+}
+
+tbody tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+tbody tr:hover {
+    background-color: #ffecec;
+}
+
+/* Style headers */
+h1, h2, h3 {
+    color: #FF4B4B;
+}
+
+/* Style buttons */
+.stButton>button {
+    background-color: #FF4B4B;
+    color: white;
+    border-radius: 8px;
+    padding: 0.6rem 1.2rem;
+    border: none;
+}
+
+.stButton>button:hover {
+    background-color: #ff7777;
+}
+
+/* Style selectbox */
+.css-2b097c-container {
+    border-radius: 8px;
+}
+</style>
+""", unsafe_allow_html=True)
