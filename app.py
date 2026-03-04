@@ -97,7 +97,7 @@ user = st.selectbox("Who is using the app?", USERS)
 # SCORING FUNCTIONS
 # -----------------------------
 def calculate_units(volume, abv):
-    return volume * (abv / 100) * 0.789
+    return (volume * abv) / 1000
 
 def daily_score(units_today):
     score = 100 - (units_today / 2) * 50
